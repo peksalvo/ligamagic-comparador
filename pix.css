@@ -1,4 +1,44 @@
-/* Pix nas páginas de pedido das lojas. Prefixo lmi-pix-. */
+/* Pagamento nas páginas de pedido das lojas. Prefixo lmi-pix-. */
+
+.lmi-pix-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  max-width: 640px;
+  box-sizing: border-box;
+  border: 2px solid #0a8f7a;
+  border-radius: 10px;
+  background: #f3fbf9;
+  color: #1b1f24;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: left;
+}
+.lmi-pix-summary .lmi-pix-toggle { align-self: flex-start; }
+
+.lmi-pix-total, .lmi-pix-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.lmi-pix-label { min-width: 78px; color: #5d6670; font-size: 12px; }
+.lmi-pix-value { word-break: break-all; font-weight: 600; }
+.lmi-pix-total .lmi-pix-amount { font-size: 24px; font-weight: 700; }
+
+.lmi-pix-copy {
+  padding: 2px 8px;
+  border: 1px solid #b9c3cc;
+  border-radius: 5px;
+  background: #fff;
+  color: #1b1f24 !important;
+  font: 12px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.lmi-pix-copy:hover { border-color: #0a8f7a; color: #0a8f7a !important; }
+
+.lmi-pix-hint { color: #5d6670; }
 
 .lmi-pix-btn {
   display: inline-block;

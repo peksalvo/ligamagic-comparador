@@ -226,11 +226,19 @@ FOIL     TCG ▲ 45%  R$ 89,50      CM ▲ 38% R$ 94,00
 - Reordenar a grade por delta (dá pra fazer, mas é o tipo de manipulação de DOM
   que quebra com qualquer mudança de layout).
 
-## Pix nas páginas de pedido das lojas (0.7.0)
+## Pagamento nas páginas de pedido das lojas (0.7.0+)
 
-Nas páginas de pedido das lojas LigaMagic (`?view=ecom/compra`, em qualquer domínio de loja), aparece um botão **Gerar QR Code Pix** logo abaixo de "Chave PIX". Ele monta um BR Code estático (padrão EMV do Banco Central) com a chave, o **Valor Total** do pedido e o número do pedido como identificador, e mostra o QR e o "copia e cola".
+Nas páginas de pedido das lojas LigaMagic (`?view=ecom/compra`, em qualquer domínio de loja), a extensão coloca logo abaixo do número do pedido um **resumo de pagamento**:
+
+- **Valor total** em destaque, com botão para copiar só o número (ex.: `162,35`);
+- **Chave Pix**, com botão de copiar;
+- **Titular** e **banco / agência / conta** (conta com botão de copiar);
+- botão **Gerar QR Code Pix**, que monta um BR Code estático (padrão EMV do Banco Central) com a chave, o valor total e o número do pedido como identificador, e mostra o QR e o "copia e cola".
+
+Lojas que informam só agência e conta (sem chave Pix) recebem o resumo sem o QR.
+
+Detalhes:
 
 - Arquivos: `pix.js`, `pix.css` e `lib/qrcode.js` (qrcode-generator 1.4.4, MIT, Kazuhiko Arase; incluído no projeto, sem CDN).
-- Mesmo princípio do comparador: nenhum seletor da loja, só os textos "Chave PIX:" e "Valor Total: R$ x".
-- O nome e a cidade no código são só informativos; o app do banco mostra o titular real da chave. Confira sempre antes de pagar.
-- Para isso o manifest passou a injetar esse script em `https://*/*`, filtrado por `include_globs` para URLs com `view=ecom/compra`.
+- Como reconhece a página: o manifest injeta o script em `https://*/*`, filtrado por `include_globs` para URLs com `view=ecom/compra` (o formato da plataforma de lojas da LigaMagic). O script só age se a página tiver "Valor Total: R$ x" **e** "Chave PIX:" ou "Conta:". Nenhum seletor da loja, mesmo princípio do comparador.
+- O nome e a cidade no BR Code são só informativos; o app do banco mostra o titular real da chave. Confira sempre antes de pagar.
