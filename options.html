@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Comparador LigaMagic — opções</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px 32px;
+        max-width: 520px;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #111827;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p.intro { margin: 0 0 24px; color: #6b7280; }
+      label { display: block; font-weight: 600; margin-bottom: 4px; }
+      .field { margin-bottom: 20px; }
+      .hint { color: #6b7280; font-size: 12px; margin-top: 4px; }
+      select, input[type="number"] {
+        width: 100%;
+        padding: 7px 9px;
+        border: 1px solid #d1d5db;
+        border-radius: 5px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+      .row { display: flex; gap: 10px; align-items: center; }
+      button {
+        padding: 8px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 5px;
+        background: #fff;
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      button.primary { background: #111827; color: #fff; border-color: #111827; }
+      #status { color: #15803d; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Comparador LigaMagic</h1>
+    <p class="intro">Preços internacionais vêm do Scryfall, que agrega TCGplayer (USD) e Cardmarket (EUR).</p>
+
+    <div class="field">
+      <label for="market">Mercado de referência</label>
+      <select id="market">
+        <option value="min">O menor entre os dois</option>
+        <option value="usd">TCGplayer (EUA)</option>
+        <option value="eur">Cardmarket (Europa)</option>
+      </select>
+      <div class="hint">"O menor entre os dois" responde melhor à pergunta "compensa comprar fora?".</div>
+    </div>
+
+    <div class="field">
+      <label for="importFactor">Fator de importação</label>
+      <input id="importFactor" type="number" min="1" max="3" step="0.05" />
+      <div class="hint">Multiplica o preço externo para embutir frete, IOF e intermediário. Use 1,00 para comparar preço puro.</div>
+    </div>
+
+    <div class="field">
+      <label for="ligaAnchor">Preço da Liga a comparar</label>
+      <select id="ligaAnchor">
+        <option value="min">O menor exibido</option>
+        <option value="max">O maior exibido</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="neutralBand">Faixa de empate (%)</label>
+      <input id="neutralBand" type="number" min="0" max="50" step="1" />
+      <div class="hint">Diferenças abaixo desse valor aparecem como "≈" em cinza.</div>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="save">Salvar</button>
+      <button id="clear">Limpar cache de preços</button>
+      <span id="status"></span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

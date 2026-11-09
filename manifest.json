@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "LigaMagic: comparador internacional",
+  "version": "0.7.0",
+  "description": "Compara o preço da LigaMagic com o preço no exterior (TCGplayer e Cardmarket, via Scryfall) direto na página de busca.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.scryfall.com/*",
+    "https://economia.awesomeapi.com.br/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.ligamagic.com.br/*",
+        "https://ligamagic.com.br/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*/*"],
+      "include_globs": ["*view=ecom/compra*", "*view=ecom%2Fcompra*"],
+      "js": ["lib/qrcode.js", "pix.js"],
+      "css": ["pix.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}
