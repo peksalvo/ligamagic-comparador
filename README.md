@@ -245,6 +245,17 @@ Muitas lojas pararam de mandar o e-mail de "novo pedido". O botão **Enviar por 
 - **Assunto:** `[Loja] Pedido #N – R$ total`;
 - **Corpo:** link do pedido, itens (quantidade, nome, código, edição, idioma, condição, foil, preço e link da carta na LigaMagic: `?view=cards/card&card=<nome>`; em "A / B" vai a primeira parte, em carta dupla "A // B" vai o nome inteiro), totais (itens, desconto, frete, crédito, total) e os dados de pagamento, incluindo o Pix copia e cola com o valor.
 
+Além do texto no link, o botão coloca na área de transferência uma **versão formatada** (HTML): número do pedido com link para o pedido, nome de cada carta com link para a LigaMagic, itens em tabela e os ícones que a loja mostra em cada carta (edição, idioma, estado). No Gmail, é só apagar o texto e colar com Ctrl+V. Os ícones são capturados de forma genérica: imagens pequenas (até 60×40 px) e fundos de imagem simples dentro do bloco de cada carta; arte da carta e sprites ficam de fora.
+
+Formatos de item reconhecidos (variam por loja):
+
+- `Doctor Who Doctor WhoInglês ENNM`: edição (repetida), idioma e estado grudados;
+- `(Rarid: U / Cor: W) Avatar: The Last Airbender` + `Inglês EN NM` em outra linha: raridade e edição, depois idioma e estado.
+
+Quando a loja informa a raridade mas não mostra o símbolo da edição, a extensão usa a imagem pública da própria LigaMagic, `repositorio.sbrauble.com/arquivos/up/ed_mtg/<EDIÇÃO>_<RARIDADE>.gif`. A edição sai do código da carta ("TLA38" → TLA); como a edição pode terminar em dígito ("FBMH3335" → FBMH3 + 335), as divisões possíveis são testadas carregando a imagem, e fica a primeira que existe. Sem raridade, nada de símbolo montado: ele sairia na cor errada.
+
+No fim da versão formatada vai o **QR Code Pix**, desenhado como tabela HTML (células pretas e brancas, ~47 KB). Não é imagem porque o Gmail descarta imagens `data:` ao colar, e gerar a imagem num serviço externo mandaria a chave e o valor para terceiros.
+
 Endereço e CPF do comprador ficam de fora. Se o pedido for grande demais para caber no link do Gmail, o texto vai para a área de transferência e o Gmail abre pedindo para colar.
 
 Detalhes:

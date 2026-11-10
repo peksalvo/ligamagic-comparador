@@ -63,13 +63,27 @@
 
   /* ---------- leitura da página ---------- */
 
+  /**
+   * Texto da página sem o nosso resumo: ele repete "Chave Pix", "Valor total"
+   * etc. e, por vir antes dos dados da loja, contaminaria a releitura
+   * (ex.: chave lida como "loja@gmail.comCopiar"). innerText ignora o que
+   * está com display:none, e não há repintura entre esconder e mostrar.
+   */
+  function pageText() {
+    const own = [...document.querySelectorAll(".lmi-pix-summary")];
+    own.forEach((e) => (e.style.display = "none"));
+    const text = document.body.innerText || "";
+    own.forEach((e) => (e.style.display = ""));
+    return text;
+  }
+
   const grab = (text, re) => {
     const m = text.match(re);
     return m ? m[1].trim() : null;
   };
 
   function readOrder() {
-    const text = document.body.innerText || "";
+    const text = pageText();
     const key = grab(text, KEY_RE);
     const total = grab(text, TOTAL_RE);
     const account = grab(text, ACCOUNT_RE);
@@ -92,7 +106,9 @@
   /* ---------- itens e totais (para o e-mail) ---------- */
 
   const LANGS = "Inglês|Português|Japonês|Espanhol|Alemão|Francês|Italiano|Russo|Coreano|Chinês Simplificado|Chinês Tradicional|Chinês";
-  const EDITION_RE = new RegExp(`^(.*?)\\s*(${LANGS})\\s*(?:[A-Z]{2})?(NM|SP|MP|HP|D|M)?\\s*$`);
+  const EDITION_RE = new RegExp(`^(.*?)\\s*(${LANGS})\\s*(?:[A-Z]{2})?\\s*(NM|SP|MP|HP|D|M)?\\s*$`);
+  const RARITY_RE = /^\(\s*Rarid[a-z.]*\s*:\s*([A-Za-z])\b[^)]*\)\s*(.*)$/i;
+  const RARITY = { C: "Comum", U: "Incomum", R: "Rara", M: "Mítica", S: "Especial", L: "Terreno básico", T: "Ficha" };
   const CONDITION = { M: "Mint", NM: "Near Mint", SP: "Slightly Played", MP: "Moderately Played", HP: "Heavily Played", D: "Damaged" };
   const ITEM_RE = /^(\d+)\s*x\s+(.+?)\s*\(C[óo]digo:\s*([^)]+)\)\s*$/i;
   const MONEY = /R\$\s*([\d.]{1,12},\d{2})/;
@@ -113,7 +129,7 @@
     for (const l of lines) {
       const m = l.match(ITEM_RE);
       if (m) {
-        cur = { qty: +m[1], name: m[2], code: m[3].trim(), unit: null, subtotal: null, edition: null, lang: null, cond: null, foil: false };
+        cur = { qty: +m[1], name: m[2], code: m[3].trim(), unit: null, subtotal: null, edition: null, rarity: null, lang: null, cond: null, foil: false };
         items.push(cur);
         continue;
       }
@@ -123,10 +139,16 @@
       else if (/\(subtotal\)/i.test(l) && MONEY.test(l)) cur.subtotal = l.match(MONEY)[1];
       else if (/^Foil$/i.test(l)) cur.foil = true;
       else if (/^Cod:/i.test(l)) continue;
-      else if (!cur.edition) {
+      else if (RARITY_RE.test(l)) {
+        // Formato "(Rarid: U / Cor: W) Avatar: The Last Airbender" (ex.: Coliseu TCG)
+        const r = l.match(RARITY_RE);
+        cur.rarity = r[1].toUpperCase();
+        if (r[2].trim()) cur.edition = r[2].trim();
+      } else if (!cur.lang) {
+        // "Doctor Who Doctor WhoInglês ENNM" (edição grudada) ou "Inglês EN NM" (linha própria)
         const e = l.match(EDITION_RE);
         if (e) {
-          cur.edition = dedupeEdition(e[1]);
+          if (e[1].trim() && !cur.edition) cur.edition = dedupeEdition(e[1]);
           cur.lang = e[2];
           cur.cond = CONDITION[e[3]] || e[3] || null;
         }
@@ -154,11 +176,64 @@
     return "https://www.ligamagic.com.br/?view=cards/card&card=" + encodeURIComponent(n).replace(/%20/g, "+");
   }
 
-  function emailText(o) {
-    const text = document.body.innerText || "";
-    const items = readItems(text);
+  /**
+   * Nome da loja: do rodapé ("Cartinhas Cards / CNPJ: ..."), que é o nome
+   * comercial; o titular da conta pode ser outro. Sem rodapé, o domínio.
+   */
+  function storeName(text) {
+    const m = [...text.matchAll(/^[ \t]*(.+?)[ \t]*\/[ \t]*CNPJ[ \t]*:/gim)].pop();
+    return m ? m[1].trim() : location.hostname.replace(/^www\./, "");
+  }
+
+  const details = (i) => [i.edition, RARITY[i.rarity] || i.rarity, i.lang, i.cond, i.foil && "Foil"].filter(Boolean);
+
+  /* ---------- símbolo da edição (imagens públicas da LigaMagic) ---------- */
+
+  const ED_ICON = (ed, r) => `https://repositorio.sbrauble.com/arquivos/up/ed_mtg/${ed}_${r}.gif`;
+  const probes = new Map();
+
+  function imageExists(url) {
+    if (!probes.has(url)) {
+      probes.set(
+        url,
+        new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth > 0);
+          img.onerror = () => resolve(false);
+          img.src = url;
+          setTimeout(() => resolve(false), 4000);
+        })
+      );
+    }
+    return probes.get(url);
+  }
+
+  /**
+   * O código da loja é edição + número ("TLA38", "DHHOB214"), mas a edição
+   * pode terminar em dígito ("FBMH3" + "335"). Testa as divisões possíveis,
+   * da edição mais longa para a mais curta, e fica com a primeira imagem que
+   * existe. Só com a raridade informada: sem ela o símbolo sairia na cor errada.
+   */
+  async function editionIcon(item) {
+    if (!item.rarity) return null;
+    const code = item.code.replace(/\s.*$/, "").toUpperCase();
+    const digits = (code.match(/\d+$/) || [""])[0];
+    const urls = [];
+    for (let k = 1; k <= digits.length; k++) {
+      const ed = code.slice(0, code.length - k);
+      if (/[A-Z]/.test(ed)) urls.push(ED_ICON(ed, item.rarity));
+    }
+    const ok = await Promise.all(urls.map(imageExists));
+    return urls[ok.indexOf(true)] || null;
+  }
+
+  const withIcons = (items) => Promise.all(items.map(async (i) => (i.edIcon = await editionIcon(i)))).then(() => items);
+
+  async function emailText(o) {
+    const text = pageText();
+    const items = await withIcons(readItems(text));
     const totals = readTotals(text);
-    const store = o.holder || location.hostname.replace(/^www\./, "");
+    const store = storeName(text);
     const qty = items.reduce((s, i) => s + i.qty, 0);
 
     const subject = `[${store}] Pedido #${o.order || "?"} – ${fmtBRL(o.amount)}`;
@@ -168,7 +243,7 @@
       L.push(`${qty} ${qty === 1 ? "item" : "itens"}`, "");
       for (const i of items) {
         L.push(`${i.qty}x ${i.name} (${i.code})`);
-        const det = [i.edition, i.lang, i.cond, i.foil && "Foil"].filter(Boolean).join(" · ");
+        const det = details(i).join(" · ");
         const price = i.unit ? `R$ ${i.unit}${i.qty > 1 && i.subtotal ? ` un. = R$ ${i.subtotal}` : ""}` : "";
         L.push("   " + [det, price].filter(Boolean).join(" — "));
         L.push("   " + ligaLink(i.name));
@@ -183,7 +258,164 @@
     const bankBits = [o.bank, o.branch && `Ag. ${o.branch}`, o.account && `Conta ${o.account}`].filter(Boolean);
     if (bankBits.length) L.push(`Banco: ${bankBits.join(" · ")}`);
     if (o.key) L.push("", "Pix copia e cola (valor já incluído):", brCode(o));
-    return { subject, body: L.join("\n") };
+    return { subject, body: L.join("\n"), html: emailHtml(o, items, totals, store, qty) };
+  }
+
+  /* ---------- versão formatada (HTML, vai pela área de transferência) ---------- */
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  /**
+   * Bloco de cada carta na página, na mesma ordem de readItems(): o maior
+   * ancestral da linha "(Código: X)" que ainda contém só uma carta.
+   */
+  function itemBlocks() {
+    const blocks = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (/\(C[óo]digo:/i.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+    const count = (e) => ((e.innerText || e.textContent || "").match(/\(C[óo]digo:/gi) || []).length;
+    for (let n; (n = walker.nextNode()); ) {
+      let b = n.parentElement;
+      while (b.parentElement && b.parentElement !== document.body && count(b.parentElement) <= 1) b = b.parentElement;
+      blocks.push(b);
+    }
+    return blocks;
+  }
+
+  /**
+   * Ícones da carta (edição, idioma, estado...): imagens pequenas e fundos de
+   * imagem simples dentro do bloco. Imagens grandes (arte da carta) e sprites
+   * (fundo com deslocamento, que sairia como a folha inteira) ficam de fora.
+   */
+  function iconsIn(block) {
+    if (!block) return [];
+    const out = [];
+    const seen = new Set();
+    const add = (src, alt) => {
+      // data: o Gmail descarta; só endereços http(s) sobrevivem ao colar.
+      if (!src || seen.has(src) || !/^https?:/.test(src)) return;
+      seen.add(src);
+      out.push({ src, alt: alt || "" });
+    };
+    for (const e of block.querySelectorAll("*")) {
+      const r = e.getBoundingClientRect();
+      if (r.width === 0 || r.height > 40 || r.width > 60) continue;
+      if (e.tagName === "IMG") {
+        add(e.currentSrc || e.src, e.alt || e.title);
+        continue;
+      }
+      const cs = getComputedStyle(e);
+      const m = cs.backgroundImage.match(/^url\("?(.+?)"?\)$/);
+      if (m && /^(0(px|%)?\s*){1,2}$/.test(cs.backgroundPosition.trim())) add(m[1], e.title || e.getAttribute("aria-label"));
+    }
+    return out;
+  }
+
+  function emailHtml(o, items, totals, store, qty) {
+    const blocks = itemBlocks();
+    const font = "font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222";
+    const small = "font-size:12px;color:#666";
+    const td = "padding:6px 8px;border-bottom:1px solid #e5e5e5;vertical-align:top";
+    const icon = (i) => `<img src="${esc(i.src)}" alt="${esc(i.alt)}" title="${esc(i.alt)}" height="14" style="height:14px;vertical-align:-2px;margin-right:3px">`;
+
+    const H = [];
+    H.push(`<div style="${font}">`);
+    H.push(`<p style="font-size:16px;margin:0 0 12px">Pedido <a href="${esc(location.href)}"><b>#${esc(o.order || "?")}</b></a> – ${esc(store)}</p>`);
+
+    if (items.length) {
+      H.push(`<p style="margin:0 0 6px">${qty} ${qty === 1 ? "item" : "itens"}</p>`);
+      H.push(`<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;${font}">`);
+      items.forEach((i, k) => {
+        const found = iconsIn(blocks[k]);
+        // Loja que não mostra o símbolo da edição: usa o da própria LigaMagic.
+        if (i.edIcon && !found.some((x) => /\/ed_mtg\//.test(x.src))) found.unshift({ src: i.edIcon, alt: i.edition || i.code });
+        const icons = found.map(icon).join("");
+        const det = details(i).map(esc).join(" · ");
+        H.push(
+          `<tr><td style="${td};white-space:nowrap"><b>${i.qty}x</b></td>` +
+            `<td style="${td}"><a href="${esc(ligaLink(i.name))}">${esc(i.name)}</a> <span style="${small}">(${esc(i.code)})</span>` +
+            `<br><span style="${small}">${icons}${det}</span></td>` +
+            `<td style="${td};white-space:nowrap;text-align:right">${i.unit ? `R$ ${esc(i.unit)}` : ""}</td>` +
+            `<td style="${td};white-space:nowrap;text-align:right"><b>${i.subtotal ? `R$ ${esc(i.subtotal)}` : ""}</b></td></tr>`
+        );
+      });
+      H.push("</table>");
+    }
+
+    H.push(`<table cellpadding="0" cellspacing="0" style="margin-top:10px;${font}">`);
+    const tl = totals.length ? totals : [{ label: "Valor Total", value: o.amountText }];
+    for (const t of tl) {
+      const strong = /total/i.test(t.label);
+      H.push(`<tr><td style="padding:2px 12px 2px 0">${esc(t.label)}:</td><td style="padding:2px 0;text-align:right${strong ? ";font-weight:bold;font-size:16px" : ""}">R$ ${esc(t.value)}</td></tr>`);
+    }
+    H.push("</table>");
+
+    H.push(`<p style="margin:16px 0 4px;font-weight:bold">Pagamento</p><p style="margin:0">`);
+    const P = [];
+    if (o.key) P.push(`Chave Pix: <b>${esc(o.key)}</b>`);
+    if (o.holder) P.push(`Titular: ${esc(o.holder)}`);
+    const bankBits = [o.bank, o.branch && `Ag. ${o.branch}`, o.account && `Conta ${o.account}`].filter(Boolean);
+    if (bankBits.length) P.push(`Banco: ${esc(bankBits.join(" · "))}`);
+    H.push(P.join("<br>") + "</p>");
+    if (o.key) {
+      H.push(`<p style="margin:10px 0 2px">Pix copia e cola (valor já incluído):</p>`);
+      H.push(`<p style="margin:0;font-family:Consolas,monospace;font-size:12px;word-break:break-all">${esc(brCode(o))}</p>`);
+      H.push(`<p style="margin:14px 0 6px">QR Code Pix (${esc(fmtBRL(o.amount))}):</p>`);
+      H.push(qrTable(brCode(o)));
+    }
+    H.push("</div>");
+    return H.join("\n");
+  }
+
+  /**
+   * QR Code como tabela HTML (células pretas e brancas). O Gmail descarta
+   * imagens data: ao colar, e gerar a imagem num serviço externo mandaria a
+   * chave e o valor para terceiros; a tabela não depende de nada disso.
+   * Células vizinhas da mesma cor viram uma só (colspan) e o markup é o mínimo
+   * possível: o Gmail corta mensagens acima de ~102 KB.
+   */
+  function qrTable(payload, cell = 4, margin = 4) {
+    const qr = qrcode(0, "M");
+    qr.addData(payload, "Byte");
+    qr.make();
+    const n = qr.getModuleCount();
+    const size = n + margin * 2;
+    const dark = (r, c) => r >= margin && c >= margin && r < n + margin && c < n + margin && qr.isDark(r - margin, c - margin);
+    const span = (k) => (k > 1 ? ` colspan="${k}"` : "");
+    const rows = [];
+    for (let r = 0; r < size; r++) {
+      let html = "";
+      for (let c = 0; c < size; ) {
+        const d = dark(r, c);
+        let k = 1;
+        while (c + k < size && dark(r, c + k) === d) k++;
+        html += d ? `<td${span(k)} bgcolor="#000" style="background:#000"></td>` : `<td${span(k)}></td>`;
+        c += k;
+      }
+      rows.push(`<tr height="${cell}" style="height:${cell}px">${html}</tr>`);
+    }
+    // Primeira linha com uma célula por coluna fixa a grade (colspan sozinho não define larguras).
+    const grid = `<tr height="0">${`<td width="${cell}" style="width:${cell}px"></td>`.repeat(size)}</tr>`;
+    return (
+      `<table cellpadding="0" cellspacing="0" border="0" width="${cell * size}" bgcolor="#fff" ` +
+      `style="border-collapse:collapse;table-layout:fixed;width:${cell * size}px;background:#fff;font-size:0;line-height:0">` +
+      grid + rows.join("") + "</table>"
+    );
+  }
+
+  async function copyRich(html, text) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function targetEmail() {
@@ -200,17 +432,28 @@
   async function openGmail(o, btn) {
     const to = await targetEmail();
     if (!to) return;
-    const { subject, body } = emailText(o);
+    const { subject, body, html } = await emailText(o);
+    // A versão formatada (links e ícones) vai para a área de transferência
+    // antes de abrir a aba: depois disso a página perde o foco.
+    const rich = await copyRich(html, body);
     const gmail = (b) =>
       "https://mail.google.com/mail/?view=cm&fs=1" +
       `&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(b)}`;
     let url = gmail(body);
     if (url.length > GMAIL_URL_MAX) {
-      // Pedido grande: o texto vai pela área de transferência.
-      await copyText(body, btn, btn.textContent);
-      url = gmail("(O pedido é grande demais para o link. O texto completo foi copiado: apague esta linha e cole com Ctrl+V.)");
+      if (!rich) await copyText(body, btn, btn.textContent);
+      url = gmail("(O pedido é grande demais para o link. O resumo completo foi copiado: apague esta linha e cole com Ctrl+V.)");
     }
     window.open(url, "_blank", "noopener");
+    if (rich) flashHint(btn, "Versão com links e ícones copiada: no Gmail, apague o texto e cole com Ctrl+V.");
+  }
+
+  function flashHint(btn, text) {
+    const old = btn.parentElement.querySelector(".lmi-pix-hint-flash");
+    if (old) old.remove();
+    const h = el("div", "lmi-pix-hint lmi-pix-hint-flash", text);
+    btn.parentElement.after(h);
+    setTimeout(() => h.remove(), 15000);
   }
 
   /** Menor elemento cujo texto casa com `re`. */
@@ -360,6 +603,8 @@
     const spot = summarySpot(order);
     if (!spot) return false;
     spot.after(buildSummary(order));
+    // Já testa os símbolos de edição, para o clique em "Enviar por e-mail" não esperar a rede.
+    withIcons(readItems(pageText()));
     return true;
   }
 
