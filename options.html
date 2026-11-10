@@ -18,7 +18,8 @@
       label { display: block; font-weight: 600; margin-bottom: 4px; }
       .field { margin-bottom: 20px; }
       .hint { color: #6b7280; font-size: 12px; margin-top: 4px; }
-      select, input[type="number"] {
+      select, input[type="number"], input[type="email"] {
+        box-sizing: border-box;
         width: 100%;
         padding: 7px 9px;
         border: 1px solid #d1d5db;
@@ -72,6 +73,12 @@
       <label for="neutralBand">Faixa de empate (%)</label>
       <input id="neutralBand" type="number" min="0" max="50" step="1" />
       <div class="hint">Diferenças abaixo desse valor aparecem como "≈" em cinza.</div>
+    </div>
+
+    <div class="field">
+      <label for="orderEmail">E-mail para resumos de pedido</label>
+      <input id="orderEmail" type="email" placeholder="voce@gmail.com" />
+      <div class="hint">Usado pelo botão "Enviar por e-mail" nas páginas de pedido das lojas. Fica só no seu navegador.</div>
     </div>
 
     <div class="row">

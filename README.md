@@ -237,6 +237,16 @@ Nas páginas de pedido das lojas LigaMagic (`?view=ecom/compra`, em qualquer dom
 
 Lojas que informam só agência e conta (sem chave Pix) recebem o resumo sem o QR.
 
+### Enviar por e-mail (0.9.0)
+
+Muitas lojas pararam de mandar o e-mail de "novo pedido". O botão **Enviar por e-mail** do resumo abre o Gmail com tudo preenchido; é só clicar em Enviar:
+
+- **Para:** o e-mail configurado nas opções da extensão (na primeira vez, a extensão pergunta e guarda em `chrome.storage.sync`; nada fica no código);
+- **Assunto:** `[Loja] Pedido #N – R$ total`;
+- **Corpo:** link do pedido, itens (quantidade, nome, código, edição, idioma, condição, foil, preço e link da carta na LigaMagic: `?view=cards/card&card=<nome>`; em "A / B" vai a primeira parte, em carta dupla "A // B" vai o nome inteiro), totais (itens, desconto, frete, crédito, total) e os dados de pagamento, incluindo o Pix copia e cola com o valor.
+
+Endereço e CPF do comprador ficam de fora. Se o pedido for grande demais para caber no link do Gmail, o texto vai para a área de transferência e o Gmail abre pedindo para colar.
+
 Detalhes:
 
 - Arquivos: `pix.js`, `pix.css` e `lib/qrcode.js` (qrcode-generator 1.4.4, MIT, Kazuhiko Arase; incluído no projeto, sem CDN).

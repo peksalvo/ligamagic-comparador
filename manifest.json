@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LigaMagic: comparador internacional",
-  "version": "0.8.0",
+  "version": "0.9.1",
   "description": "Compara o preço da LigaMagic com o preço no exterior (TCGplayer e Cardmarket, via Scryfall) direto na página de busca.",
   "permissions": ["storage"],
   "host_permissions": [

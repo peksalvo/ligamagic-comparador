@@ -89,6 +89,130 @@
     };
   }
 
+  /* ---------- itens e totais (para o e-mail) ---------- */
+
+  const LANGS = "Inglês|Português|Japonês|Espanhol|Alemão|Francês|Italiano|Russo|Coreano|Chinês Simplificado|Chinês Tradicional|Chinês";
+  const EDITION_RE = new RegExp(`^(.*?)\\s*(${LANGS})\\s*(?:[A-Z]{2})?(NM|SP|MP|HP|D|M)?\\s*$`);
+  const CONDITION = { M: "Mint", NM: "Near Mint", SP: "Slightly Played", MP: "Moderately Played", HP: "Heavily Played", D: "Damaged" };
+  const ITEM_RE = /^(\d+)\s*x\s+(.+?)\s*\(C[óo]digo:\s*([^)]+)\)\s*$/i;
+  const MONEY = /R\$\s*([\d.]{1,12},\d{2})/;
+  const TOTAL_LINE_RE = /(Valor dos Itens|Desconto|Frete|Cr[ée]dito utilizado|Valor Total)\s*:\s*R\$\s*([\d.]{1,12},\d{2})/i;
+
+  /** A loja escreve a edição duas vezes ("Doctor Who Doctor Who"). */
+  function dedupeEdition(s) {
+    s = s.trim();
+    const n = s.length;
+    if (n % 2 === 1 && s[(n - 1) / 2] === " " && s.slice(0, (n - 1) / 2) === s.slice((n + 1) / 2)) return s.slice(0, (n - 1) / 2);
+    return s;
+  }
+
+  function readItems(text) {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const items = [];
+    let cur = null;
+    for (const l of lines) {
+      const m = l.match(ITEM_RE);
+      if (m) {
+        cur = { qty: +m[1], name: m[2], code: m[3].trim(), unit: null, subtotal: null, edition: null, lang: null, cond: null, foil: false };
+        items.push(cur);
+        continue;
+      }
+      if (!cur) continue;
+      if (TOTAL_LINE_RE.test(l)) { cur = null; continue; }
+      if (/\(unid\.?\)/i.test(l) && MONEY.test(l)) cur.unit = l.match(MONEY)[1];
+      else if (/\(subtotal\)/i.test(l) && MONEY.test(l)) cur.subtotal = l.match(MONEY)[1];
+      else if (/^Foil$/i.test(l)) cur.foil = true;
+      else if (/^Cod:/i.test(l)) continue;
+      else if (!cur.edition) {
+        const e = l.match(EDITION_RE);
+        if (e) {
+          cur.edition = dedupeEdition(e[1]);
+          cur.lang = e[2];
+          cur.cond = CONDITION[e[3]] || e[3] || null;
+        }
+      }
+    }
+    return items;
+  }
+
+  function readTotals(text) {
+    const out = [];
+    for (const l of text.split("\n")) {
+      const m = l.match(TOTAL_LINE_RE);
+      if (m && !out.some((t) => t.label.toLowerCase() === m[1].toLowerCase())) out.push({ label: m[1], value: m[2] });
+    }
+    return out;
+  }
+
+  /**
+   * Link da carta na LigaMagic. A página aceita nome em inglês ou em
+   * português. "A / B" é o nome nos dois idiomas (em qualquer ordem): fica a
+   * primeira parte. "A // B" é carta dupla: vai inteiro, que é como a Liga indexa.
+   */
+  function ligaLink(name) {
+    const n = name.split(/\s+\/\s+/)[0].trim(); // separa em " / ", não em " // "
+    return "https://www.ligamagic.com.br/?view=cards/card&card=" + encodeURIComponent(n).replace(/%20/g, "+");
+  }
+
+  function emailText(o) {
+    const text = document.body.innerText || "";
+    const items = readItems(text);
+    const totals = readTotals(text);
+    const store = o.holder || location.hostname.replace(/^www\./, "");
+    const qty = items.reduce((s, i) => s + i.qty, 0);
+
+    const subject = `[${store}] Pedido #${o.order || "?"} – ${fmtBRL(o.amount)}`;
+    const L = [];
+    L.push(`Pedido #${o.order || "?"} – ${store}`, location.href, "");
+    if (items.length) {
+      L.push(`${qty} ${qty === 1 ? "item" : "itens"}`, "");
+      for (const i of items) {
+        L.push(`${i.qty}x ${i.name} (${i.code})`);
+        const det = [i.edition, i.lang, i.cond, i.foil && "Foil"].filter(Boolean).join(" · ");
+        const price = i.unit ? `R$ ${i.unit}${i.qty > 1 && i.subtotal ? ` un. = R$ ${i.subtotal}` : ""}` : "";
+        L.push("   " + [det, price].filter(Boolean).join(" — "));
+        L.push("   " + ligaLink(i.name));
+      }
+      L.push("");
+    }
+    for (const t of totals) L.push(`${t.label}: R$ ${t.value}`);
+    if (!totals.length) L.push(`Valor Total: ${fmtBRL(o.amount)}`);
+    L.push("", "PAGAMENTO");
+    if (o.key) L.push(`Chave Pix: ${o.key}`);
+    if (o.holder) L.push(`Titular: ${o.holder}`);
+    const bankBits = [o.bank, o.branch && `Ag. ${o.branch}`, o.account && `Conta ${o.account}`].filter(Boolean);
+    if (bankBits.length) L.push(`Banco: ${bankBits.join(" · ")}`);
+    if (o.key) L.push("", "Pix copia e cola (valor já incluído):", brCode(o));
+    return { subject, body: L.join("\n") };
+  }
+
+  async function targetEmail() {
+    let { orderEmail } = await chrome.storage.sync.get({ orderEmail: "" });
+    if (orderEmail) return orderEmail;
+    orderEmail = (prompt("Para qual e-mail devo mandar os resumos de pedido? (dá para mudar depois nas opções da extensão)") || "").trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(orderEmail)) return null;
+    await chrome.storage.sync.set({ orderEmail });
+    return orderEmail;
+  }
+
+  const GMAIL_URL_MAX = 7000; // acima disso o Gmail pode recusar o link
+
+  async function openGmail(o, btn) {
+    const to = await targetEmail();
+    if (!to) return;
+    const { subject, body } = emailText(o);
+    const gmail = (b) =>
+      "https://mail.google.com/mail/?view=cm&fs=1" +
+      `&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(b)}`;
+    let url = gmail(body);
+    if (url.length > GMAIL_URL_MAX) {
+      // Pedido grande: o texto vai pela área de transferência.
+      await copyText(body, btn, btn.textContent);
+      url = gmail("(O pedido é grande demais para o link. O texto completo foi copiado: apague esta linha e cole com Ctrl+V.)");
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
   /** Menor elemento cujo texto casa com `re`. */
   function textAnchor(re) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
@@ -200,6 +324,14 @@
     const bankBits = [o.bank, o.branch && `Ag. ${o.branch}`, o.account && `Conta ${o.account}`].filter(Boolean);
     if (bankBits.length) box.append(row("Banco", bankBits.join(" · "), o.account));
 
+    const actions = el("div", "lmi-pix-actions");
+    box.append(actions);
+
+    const mail = el("button", "lmi-pix-btn lmi-pix-secondary", "Enviar por e-mail");
+    mail.type = "button";
+    mail.title = "Abre o Gmail com o resumo do pedido já preenchido";
+    mail.addEventListener("click", () => openGmail(readOrder() || o, mail));
+
     if (o.key) {
       const toggle = el("button", "lmi-pix-btn lmi-pix-toggle", "Gerar QR Code Pix");
       toggle.type = "button";
@@ -215,8 +347,9 @@
         box.append(panel);
         toggle.textContent = "Fechar QR Code";
       });
-      box.append(toggle);
+      actions.append(toggle);
     }
+    actions.append(mail);
     return box;
   }
 

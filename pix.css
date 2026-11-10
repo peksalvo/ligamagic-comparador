@@ -15,7 +15,10 @@
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   text-align: left;
 }
-.lmi-pix-summary .lmi-pix-toggle { align-self: flex-start; }
+.lmi-pix-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lmi-pix-actions .lmi-pix-btn { margin: 4px 0 0; }
+.lmi-pix-btn.lmi-pix-secondary { background: #fff; color: #0a8f7a !important; box-shadow: inset 0 0 0 1px #0a8f7a; }
+.lmi-pix-btn.lmi-pix-secondary:hover { background: #e6f5f2; }
 
 .lmi-pix-total, .lmi-pix-row {
   display: flex;

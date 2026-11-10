@@ -3,6 +3,7 @@ const DEFAULTS = {
   importFactor: 1.0,
   ligaAnchor: "min",
   neutralBand: 5,
+  orderEmail: "",
 };
 
 const els = {
@@ -10,6 +11,7 @@ const els = {
   importFactor: document.getElementById("importFactor"),
   ligaAnchor: document.getElementById("ligaAnchor"),
   neutralBand: document.getElementById("neutralBand"),
+  orderEmail: document.getElementById("orderEmail"),
   status: document.getElementById("status"),
 };
 
@@ -24,6 +26,7 @@ function flash(text) {
   els.importFactor.value = cfg.importFactor;
   els.ligaAnchor.value = cfg.ligaAnchor;
   els.neutralBand.value = cfg.neutralBand;
+  els.orderEmail.value = cfg.orderEmail;
 })();
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -32,6 +35,7 @@ document.getElementById("save").addEventListener("click", async () => {
     importFactor: parseFloat(els.importFactor.value) || 1,
     ligaAnchor: els.ligaAnchor.value,
     neutralBand: parseInt(els.neutralBand.value, 10) || 0,
+    orderEmail: els.orderEmail.value.trim(),
   });
   flash("Salvo. Recarregue a página da Liga.");
 });
